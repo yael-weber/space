@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>Space Survivor - Levels Edition</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #050509;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+        }
+
+        #bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('image.jpg');
+            background-size: cover;
+            filter: blur(15px);
+            z-index: -1;
+            opacity: 0.5;
+            transform: scale(1.1);
+        }
+
+        /* ממשק עליון - ניקוד ושלב */
+        #ui {
+            position: absolute;
+            top: 20px; left: 0; width: 100%;
+            display: flex;
+            justify-content: space-around;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .stat-box {
+            background: rgba(0, 210, 255, 0.1);
+            padding: 10px 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            backdrop-filter: blur(5px);
+            font-size: 24px;
+            font-weight: bold;
+            color: #00d2ff;
+            text-shadow: 0 0 10px #00d2ff;
+        }
+
+        /* מסכי הודעות (תפריט, גיים אובר, מעבר שלב) */
+        .overlay {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 15, 30, 0.95);
+            padding: 50px;
+            border-radius: 30px;
+            border: 3px solid #00d2ff;
+            text-align: center;
+            z-index: 100;
+            box-shadow: 0 0 50px rgba(0, 210, 255, 0.5);
+            display: none; /* מוסתר כברירת מחדל */
+        }
+
+        h1 { font-size: 3rem; margin-bottom: 10px; color: #00d2ff; }
+        p { font-size: 1.2rem; margin-bottom: 30px; }
+
+        button {
+            background: linear-gradient(45deg, #00d2ff, #0072ff);
+            border: none;
+            padding: 15px 40px;
+            color: white;
+            font-size: 22px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button:hover {
+            transform: scale(1.1) translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 210, 255, 0.4);
+        }
+
+        canvas { display: block; }
+
+        .firework {
+            position: fixed;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="bg"></div>
+
+    <div id="ui">
+        <div class="stat-box" id="scoreDisplay">ניקוד: 0</div>
+        <div class="stat-box" id="levelDisplay">שלב: 1</div>
+    </div>
+    
+   <div id="startMenu" class="overlay" style="display: block;">
+    <h1>יהלומים בחלל</h1>
+    <div style="text-align: right; margin-bottom: 25px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px;">
+        <h3 style="color: #f1c40f; margin-top: 0;">📜 הוראות המשחק:</h3>
+        <ul style="list-style: none; padding: 0; line-height: 1.8;">
+            <li>🚀 <b>תנועה:</b> החללית עוקבת אחרי סמן העכבר שלך.</li>
+            <li>💎 <b>המטרה:</b> אסוף יהלומים צהובים כדי לצבור נקודות ולעלות שלב.</li>
+            <li>☄️ <b>זהירות:</b> אל תיגע במוקשים האדומים - הם יפוצצו אותך!</li>
+            <li>🏆 <b>שלבים:</b> בכל שלב המהירות עולה. תצליח להגיע לשלב האחרון?</li>
+        </ul>
+    </div>
+    <button onclick="initGame(1)">הבנתי, בוא נטוס! 🚀</button>
+</div>
+
+    <div id="gameOverScreen" class="overlay">
+        <h1 style="color: #ff4757;">אופס נפסלת!</h1>
+        <p id="finalScoreText"></p>
+        <button onclick="resetToStart()">נסה שוב</button>
+    </div>
+
+    <div id="levelUpScreen" class="overlay">
+        <h1>כל הכבוד!!</h1>
+        <p id="levelUpText"></p>
+        <button id="nextLevelBtn">לשלב הבא</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // אלמנטים של ממשק
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const startMenu = document.getElementById('startMenu');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const levelUpScreen = document.getElementById('levelUpScreen');
+        const finalScoreText = document.getElementById('finalScoreText');
+        const levelUpText = document.getElementById('levelUpText');
+        const nextLevelBtn = document.getElementById('nextLevelBtn');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let score = 0;
+        let level = 1;
+        let gameActive = false;
+        let player = { x: canvas.width/2, y: canvas.height/2, r: 20 };
+        let items = [];
+        let spawnTimer;
+
+        // ניהול שלבים
+        const levelsConfig = {
+            1: { target: 1000, speedBoost: 1, spawnRate: 800 },
+            2: { target: 2000, speedBoost: 1.5, spawnRate: 600 },
+            3: { target: 5000, speedBoost: 2.2, spawnRate: 400 }
+        };
+
+        function initGame(lvl) {
+            level = lvl;
+            score = 0;
+            items = [];
+            gameActive = true;
+            
+            // הסתרת כל המסכים
+            startMenu.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            levelUpScreen.style.display = 'none';
+            
+            updateUI();
+            startSpawning();
+            update();
+        }
+
+        function updateUI() {
+            scoreDisplay.innerText = `ניקוד: ${score}`;
+            levelDisplay.innerText = `שלב: ${level}`;
+        }
+
+        function startSpawning() {
+            if(spawnTimer) clearInterval(spawnTimer);
+            spawnTimer = setInterval(() => {
+                if (!gameActive) return;
+                spawnObject();
+            }, levelsConfig[level].spawnRate);
+        }
+
+        function spawnObject() {
+            const type = Math.random() > 0.4 ? 'item' : 'enemy';
+            items.push({
+                x: Math.random() * canvas.width,
+                y: -50,
+                r: type === 'item' ? 12 : 18,
+                speed: (Math.random() * 3 + 2) * levelsConfig[level].speedBoost,
+                type: type,
+                color: type === 'item' ? '#f1c40f' : '#ff4757'
+            });
+        }
+
+        function update() {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // שחקן
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "#00d2ff";
+            ctx.fillStyle = "#00d2ff";
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
+            ctx.fill();
+
+            // אובייקטים
+            for (let i = items.length - 1; i >= 0; i--) {
+                let s = items[i];
+                s.y += s.speed;
+
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = s.color;
+                ctx.fillStyle = s.color;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+                ctx.fill();
+
+                let dist = Math.hypot(player.x - s.x, player.y - s.y);
+                if (dist < player.r + s.r) {
+                    if (s.type === 'item') {
+                        score += 100; // העליתי את הניקוד כדי שיהיה קל להגיע לשלבים
+                        updateUI();
+                        createFirework(s.x, s.y);
+                        items.splice(i, 1);
+                        checkLevelComplete();
+                    } else {
+                        triggerGameOver();
+                    }
+                } else if (s.y > canvas.height + 50) {
+                    items.splice(i, 1);
+                }
+            }
+            requestAnimationFrame(update);
+        }
+
+        function checkLevelComplete() {
+            if (score >= levelsConfig[level].target) {
+                gameActive = false;
+                levelUpText.innerText = `סיימת את שלב ${level}! היעד הבא: ${levelsConfig[level+1]?.target || 'אין סוף'} נקודות.`;
+                levelUpScreen.style.display = 'block';
+                
+                nextLevelBtn.onclick = () => {
+                    initGame(level + 1);
+                };
+            }
+        }
+
+        function triggerGameOver() {
+            gameActive = false;
+            clearInterval(spawnTimer);
+            finalScoreText.innerText = `הגעת לניקוד של ${score} בשלב ${level}`;
+            gameOverScreen.style.display = 'block';
+        }
+
+        function resetToStart() {
+            gameOverScreen.style.display = 'none';
+            startMenu.style.display = 'block';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        window.onmousemove = (e) => {
+            player.x = e.clientX;
+            player.y = e.clientY;
+        };
+
+        function createFirework(x, y) {
+            for (let i = 0; i < 15; i++) {
+                const f = document.createElement('div');
+                f.className = 'firework';
+                f.style.left = x + 'px';
+                f.style.top = y + 'px';
+                const color = `hsl(${Math.random() * 360}, 100%, 60%)`;
+                f.style.backgroundColor = color;
+                f.style.boxShadow = `0 0 10px ${color}`;
+                document.body.appendChild(f);
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * 80 + 40;
+                f.animate([
+                    { transform: 'translate(0,0) scale(1)', opacity: 1 },
+                    { transform: `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px) scale(0)`, opacity: 0 }
+                ], { duration: 600 }).onfinish = () => f.remove();
+            }
+        }
+    </script>
+</body>
+</html>
