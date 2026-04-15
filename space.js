@@ -32,7 +32,7 @@ function update() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // ציור השחקן (חללית ניאון)
+    // ציור השחקן
     ctx.beginPath();
     ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
     ctx.fillStyle = "#00d2ff";
@@ -49,7 +49,7 @@ function update() {
         ctx.fillStyle = "#f1c40f"; // צהוב זהב
         ctx.fill();
         
-        // בדיקת התנגשות (איסוף)
+        // בדיקת התנגשות 
         let dist = Math.hypot(player.x - c.x, player.y - c.y);
         if (dist < player.radius + c.radius) {
             score += 10;
@@ -95,5 +95,3 @@ startBtn.onclick = () => {
     setInterval(() => spawnObject('collect'), 1500);
     update();
 };
-
-// כאן תוסיף את פונקציית ה-createFirework המקורית שכתבנו!
